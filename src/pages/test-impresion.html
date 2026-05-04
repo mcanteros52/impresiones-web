@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test Impresión</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    max-width: 500px;
+    margin: 60px auto;
+    padding: 20px;
+    background: #f5f5f5;
+  }
+  .card {
+    background: white;
+    border-radius: 12px;
+    padding: 32px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+  h2 { margin: 0 0 24px; font-size: 20px; color: #111; }
+  .drop-zone {
+    border: 2px dashed #ccc;
+    border-radius: 8px;
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    color: #888;
+    font-size: 14px;
+    margin-bottom: 16px;
+    transition: border-color 0.2s;
+  }
+  .drop-zone:hover { border-color: #666; }
+  .drop-zone.selected { border-color: #2563eb; color: #2563eb; background: #eff6ff; }
+  input[type="file"] { display: none; }
+  button {
+    width: 100%;
+    padding: 12px;
+    background: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    cursor: pointer;
+    margin-top: 8px;
+  }
+  button:hover { background: #1d4ed8; }
+  button:disabled { background: #93c5fd; cursor: not-allowed; }
+  .status {
+    margin-top: 16px;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    display: none;
+  }
+  .status.success { background: #dcfce7; color: #166534; display: block; }
+  .status.error { background: #fee2e2; color: #991b1b; display: block; }
+  .status.loading { background: #dbeafe; color: #1e40af; display: block; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h2>🖨️ Test de Impresión Remota</h2>
+
+  <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+    <div id="dropText">Hacé clic para elegir un PDF</div>
+  </div>
+  <input type="file" id="fileInput" accept=".pdf">
+
+  <button id="printBtn" onclick="enviarAImprimir()" disabled>Imprimir</button>
+
+  <div class="status" id="status"></div>
+</div>
+
+<script>
+  const API_URL = 'https://gkq2wcd8ni.execute-api.us-east-1.amazonaws.com/prod/';
+  let archivoSeleccionado = null;
+
+  document.getElementById('fileInput').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file && file.type === 'application/pdf') {
+      archivoSeleccionado = file;
+      document.getElementById('dropText').textContent = '✓ ' + file.name;
+      document.getElementById('dropZone').classList.add('selected');
+      document.getElementById('printBtn').disabled = false;
+    }
+  });
+
+  async function enviarAImprimir() {
+    if (!archivoSeleccionado) return;
+
+    const btn = document.getElementById('printBtn');
+    const status = document.getElementById('status');
+
+    btn.disabled = true;
+    btn.textContent = 'Enviando...';
+    status.className = 'status loading';
+    status.textContent = 'Enviando a imprimir...';
+
+    try {
+      const base64 = await fileToBase64(archivoSeleccionado);
+
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdf: base64 })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        status.className = 'status success';
+        status.textContent = '✓ Enviado a imprimir correctamente';
+      } else {
+        throw new Error(data.message || 'Error al imprimir');
+      }
+    } catch (err) {
+      status.className = 'status error';
+      status.textContent = '✗ Error: ' + err.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Imprimir';
+    }
+  }
+
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+</script>
+</body>
+</html>
