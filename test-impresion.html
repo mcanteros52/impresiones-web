@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Test Impresión</title>
+<title>Impresiones App</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
   body {
     font-family: Arial, sans-serif;
@@ -33,18 +34,42 @@
   .drop-zone:hover { border-color: #666; }
   .drop-zone.selected { border-color: #2563eb; color: #2563eb; background: #eff6ff; }
   input[type="file"] { display: none; }
+  .resumen {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+    display: none;
+  }
+  .resumen-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    padding: 4px 0;
+    color: #444;
+  }
+  .resumen-row.total {
+    font-weight: bold;
+    font-size: 16px;
+    color: #111;
+    border-top: 1px solid #e2e8f0;
+    margin-top: 8px;
+    padding-top: 8px;
+  }
   button {
     width: 100%;
-    padding: 12px;
-    background: #2563eb;
+    padding: 14px;
+    background: #009ee3;
     color: white;
     border: none;
     border-radius: 8px;
     font-size: 15px;
     cursor: pointer;
     margin-top: 8px;
+    font-weight: bold;
   }
-  button:hover { background: #1d4ed8; }
+  button:hover { background: #007fc0; }
   button:disabled { background: #93c5fd; cursor: not-allowed; }
   .status {
     margin-top: 16px;
@@ -56,71 +81,116 @@
   .status.success { background: #dcfce7; color: #166534; display: block; }
   .status.error { background: #fee2e2; color: #991b1b; display: block; }
   .status.loading { background: #dbeafe; color: #1e40af; display: block; }
+  .mp-logo { color: #009ee3; font-weight: bold; }
 </style>
 </head>
 <body>
 <div class="card">
-  <h2>🖨️ Test de Impresión Remota</h2>
+  <h2>🖨️ Impresiones App</h2>
 
   <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
     <div id="dropText">Hacé clic para elegir un PDF</div>
   </div>
   <input type="file" id="fileInput" accept=".pdf">
 
-  <button id="printBtn" onclick="enviarAImprimir()" disabled>Imprimir</button>
+  <div class="resumen" id="resumen">
+    <div class="resumen-row">
+      <span>Páginas detectadas</span>
+      <span id="numPaginas">-</span>
+    </div>
+    <div class="resumen-row">
+      <span>Precio por página</span>
+      <span>$100</span>
+    </div>
+    <div class="resumen-row total">
+      <span>Total a pagar</span>
+      <span id="totalPrecio">-</span>
+    </div>
+  </div>
+
+  <button id="pagarBtn" onclick="iniciarPago()" disabled>
+    Pagar con <span class="mp-logo">Mercado Pago</span>
+  </button>
 
   <div class="status" id="status"></div>
 </div>
 
 <script>
-  const API_URL = 'https://gkq2wcd8ni.execute-api.us-east-1.amazonaws.com/prod/';
+  const API_URL = 'https://gkq2wcd8ni.execute-api.us-east-1.amazonaws.com/prod';
   let archivoSeleccionado = null;
+  let pdfBase64 = null;
+  let numeroPaginas = 0;
 
-  document.getElementById('fileInput').addEventListener('change', function(e) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  document.getElementById('fileInput').addEventListener('change', async function(e) {
     const file = e.target.files[0];
-    if (file && file.type === 'application/pdf') {
-      archivoSeleccionado = file;
-      document.getElementById('dropText').textContent = '✓ ' + file.name;
-      document.getElementById('dropZone').classList.add('selected');
-      document.getElementById('printBtn').disabled = false;
+    if (!file || file.type !== 'application/pdf') return;
+
+    archivoSeleccionado = file;
+    document.getElementById('dropText').textContent = '✓ ' + file.name;
+    document.getElementById('dropZone').classList.add('selected');
+
+    mostrarStatus('loading', 'Analizando PDF...');
+
+    try {
+      pdfBase64 = await fileToBase64(file);
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      numeroPaginas = pdf.numPages;
+
+      document.getElementById('numPaginas').textContent = numeroPaginas;
+      document.getElementById('totalPrecio').textContent = '$' + (numeroPaginas * 100).toLocaleString('es-AR');
+      document.getElementById('resumen').style.display = 'block';
+      document.getElementById('pagarBtn').disabled = false;
+      document.getElementById('status').style.display = 'none';
+
+    } catch (err) {
+      mostrarStatus('error', 'Error al leer el PDF: ' + err.message);
     }
   });
 
-  async function enviarAImprimir() {
+  async function iniciarPago() {
     if (!archivoSeleccionado) return;
 
-    const btn = document.getElementById('printBtn');
-    const status = document.getElementById('status');
-
+    const btn = document.getElementById('pagarBtn');
     btn.disabled = true;
-    btn.textContent = 'Enviando...';
-    status.className = 'status loading';
-    status.textContent = 'Enviando a imprimir...';
+    mostrarStatus('loading', 'Creando orden de pago...');
 
     try {
-      const base64 = await fileToBase64(archivoSeleccionado);
+      const archiveId = 'pdf_' + Date.now();
 
-      const response = await fetch(API_URL, {
+      const response = await fetch(API_URL + '/pago', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pdf: base64 })
+        body: JSON.stringify({
+          paginas: numeroPaginas,
+          archiveId: archiveId,
+          pdf: pdfBase64
+        })
       });
 
       const data = await response.json();
 
-      if (response.ok) {
-        status.className = 'status success';
-        status.textContent = '✓ Enviado a imprimir correctamente';
+      if (data.init_point) {
+        mostrarStatus('success', 'Redirigiendo a Mercado Pago...');
+        setTimeout(() => {
+          window.location.href = data.init_point;
+        }, 1000);
       } else {
-        throw new Error(data.message || 'Error al imprimir');
+        throw new Error('No se pudo crear la preferencia de pago');
       }
+
     } catch (err) {
-      status.className = 'status error';
-      status.textContent = '✗ Error: ' + err.message;
-    } finally {
+      mostrarStatus('error', 'Error: ' + err.message);
       btn.disabled = false;
-      btn.textContent = 'Imprimir';
     }
+  }
+
+  function mostrarStatus(tipo, mensaje) {
+    const el = document.getElementById('status');
+    el.className = 'status ' + tipo;
+    el.textContent = (tipo === 'loading' ? '⏳ ' : tipo === 'success' ? '✓ ' : '✗ ') + mensaje;
   }
 
   function fileToBase64(file) {
