@@ -5,32 +5,48 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin - Impresiones</title>
 <style>
-  body { font-family: Arial, sans-serif; margin: 0; background: #f5f5f5; }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; margin: 0; background: #f1f5f9; }
   .header { background: #1e293b; color: white; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
   .header h1 { margin: 0; font-size: 18px; }
   .btn-logout { background: transparent; border: 1px solid #fff; color: white; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; }
-  .container { max-width: 1000px; margin: 32px auto; padding: 0 20px; }
-  .card { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-  h2 { margin: 0 0 20px; font-size: 16px; color: #333; }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th { text-align: left; padding: 10px 12px; background: #f8fafc; border-bottom: 2px solid #e2e8f0; color: #64748b; }
-  td { padding: 12px; border-bottom: 1px solid #f1f5f9; color: #333; }
+  .container { max-width: 1100px; margin: 24px auto; padding: 0 20px; }
+  .card { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 20px; }
+  h2 { margin: 0 0 16px; font-size: 15px; color: #334155; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 10px 12px; background: #f8fafc; border-bottom: 2px solid #e2e8f0; color: #64748b; white-space: nowrap; }
+  td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; color: #333; vertical-align: middle; }
   tr:last-child td { border-bottom: none; }
-  .badge { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+  tr:hover td { background: #f8fafc; }
+  .badge { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: bold; display: inline-block; }
   .badge.impreso { background: #dcfce7; color: #166534; }
   .badge.pendiente { background: #fef9c3; color: #854d0e; }
   .badge.error { background: #fee2e2; color: #991b1b; }
   .loading { text-align: center; padding: 40px; color: #888; }
   .login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
   .login-card { background: white; border-radius: 12px; padding: 40px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1); max-width: 400px; width: 100%; }
-  .login-card h2 { margin: 0 0 8px; }
+  .login-card h2 { margin: 0 0 8px; border: none; }
   .login-card p { color: #888; margin: 0 0 24px; }
   .btn-login { background: #2563eb; color: white; border: none; padding: 12px 32px; border-radius: 8px; font-size: 15px; cursor: pointer; width: 100%; }
   .btn-login:hover { background: #1d4ed8; }
-  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
-  .stat { background: white; border-radius: 10px; padding: 20px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-  .stat-num { font-size: 28px; font-weight: bold; color: #1e293b; }
-  .stat-label { font-size: 13px; color: #888; margin-top: 4px; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+  .stat { background: white; border-radius: 10px; padding: 20px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+  .stat-num { font-size: 26px; font-weight: bold; color: #1e293b; }
+  .stat-label { font-size: 12px; color: #888; margin-top: 4px; }
+  .stat.alerta .stat-num { color: #dc2626; }
+  .day-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+  .day-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; }
+  .day-card .dia { font-weight: bold; font-size: 13px; color: #334155; margin-bottom: 8px; }
+  .day-card .linea { display: flex; justify-content: space-between; font-size: 12px; color: #64748b; margin-top: 4px; }
+  .day-card .linea span:last-child { font-weight: bold; color: #1e293b; }
+  .mp-id { font-family: monospace; font-size: 11px; color: #6366f1; }
+  .sin-mp { font-size: 11px; color: #94a3b8; font-style: italic; }
+  .alerta-row td { background: #fff7f7 !important; }
+  .tag-alerta { background: #fee2e2; color: #991b1b; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 4px; }
+  .printer-status { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .dot.online { background: #22c55e; }
+  .dot.offline { background: #ef4444; }
 </style>
 </head>
 <body>
@@ -46,13 +62,19 @@
 <div id="adminScreen" style="display:none;">
   <div class="header">
     <h1>🖨️ Panel de Administración</h1>
-    <button class="btn-logout" onclick="logout()">Cerrar sesión</button>
+    <div style="display:flex;align-items:center;gap:16px;">
+      <div id="printerStatus" class="printer-status"><span class="dot"></span> Verificando...</div>
+      <button class="btn-logout" onclick="logout()">Cerrar sesión</button>
+    </div>
   </div>
+
   <div class="container">
+
+    <!-- Stats globales -->
     <div class="stats">
       <div class="stat">
         <div class="stat-num" id="totalImpresiones">-</div>
-        <div class="stat-label">Total impresiones</div>
+        <div class="stat-label">Impresiones exitosas</div>
       </div>
       <div class="stat">
         <div class="stat-num" id="totalPaginas">-</div>
@@ -60,13 +82,26 @@
       </div>
       <div class="stat">
         <div class="stat-num" id="totalRecaudado">-</div>
-        <div class="stat-label">Recaudado (ARS)</div>
+        <div class="stat-label">Recaudado total</div>
+      </div>
+      <div class="stat alerta">
+        <div class="stat-num" id="totalPendientes">-</div>
+        <div class="stat-label">⚠️ Pagados sin imprimir</div>
       </div>
     </div>
+
+    <!-- Resumen por día -->
     <div class="card">
-      <h2>Historial de impresiones</h2>
+      <h2>📅 Resumen por día</h2>
+      <div class="day-grid" id="resumenDias"><div class="loading">Cargando...</div></div>
+    </div>
+
+    <!-- Historial -->
+    <div class="card">
+      <h2>📋 Historial de impresiones</h2>
       <div id="tabla"><div class="loading">Cargando...</div></div>
     </div>
+
   </div>
 </div>
 
@@ -76,10 +111,10 @@
   const REDIRECT_URI = 'https://main.dtlj9jer6t72g.amplifyapp.com/admin';
   const API_URL = 'https://gkq2wcd8ni.execute-api.us-east-1.amazonaws.com/prod';
   const ADMIN_EMAIL = 'mcanteros52@gmail.com';
+  const PRINTNODE_API_KEY = 'csOrj4p9G1a6ux7y9YIcG9of93IbJEnzMSkB-1Jdokg';
 
   async function init() {
     const code = new URLSearchParams(window.location.search).get('code');
-
     if (code) {
       await exchangeCode(code);
       window.history.replaceState({}, '', '/admin');
@@ -91,6 +126,7 @@
       if (email === ADMIN_EMAIL) {
         showAdmin();
         cargarImpresiones();
+        verificarImpresora();
       } else {
         sessionStorage.clear();
         document.getElementById('loginScreen').style.display = 'flex';
@@ -120,8 +156,7 @@
 
   function getEmailFromToken(token) {
     try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      return payload.email;
+      return JSON.parse(atob(token.split('.')[1])).email;
     } catch { return null; }
   }
 
@@ -139,6 +174,21 @@
     document.getElementById('adminScreen').style.display = 'block';
   }
 
+  async function verificarImpresora() {
+    try {
+      const res = await fetch('https://api.printnode.com/printers/75430456', {
+        headers: { 'Authorization': 'Basic ' + btoa(PRINTNODE_API_KEY + ':') }
+      });
+      const data = await res.json();
+      const printer = Array.isArray(data) ? data[0] : data;
+      const online = printer?.computer?.state === 'connected';
+      const el = document.getElementById('printerStatus');
+      el.innerHTML = `<span class="dot ${online ? 'online' : 'offline'}"></span> Impresora: ${online ? 'Online ✓' : 'Offline ✗'}`;
+    } catch {
+      document.getElementById('printerStatus').innerHTML = '<span class="dot offline"></span> Sin estado';
+    }
+  }
+
   async function cargarImpresiones() {
     try {
       const token = sessionStorage.getItem('access_token');
@@ -146,44 +196,93 @@
         headers: { 'Authorization': token }
       });
       const data = await response.json();
-      mostrarTabla(data.items || []);
+      procesar(data.items || []);
     } catch (e) {
       document.getElementById('tabla').innerHTML = '<div class="loading">Error al cargar datos</div>';
     }
   }
 
+  function procesar(items) {
+    const impresos = items.filter(i => i.estado?.S === 'impreso');
+    const pendientes = items.filter(i => i.estado?.S === 'pendiente' && i.fecha?.S);
+    const totalPaginas = impresos.reduce((s, i) => s + parseInt(i.paginas?.N || 0), 0);
+    const totalRec = impresos.reduce((s, i) => s + parseInt(i.precio?.N || 0), 0);
+
+    document.getElementById('totalImpresiones').textContent = impresos.length;
+    document.getElementById('totalPaginas').textContent = totalPaginas;
+    document.getElementById('totalRecaudado').textContent = '$' + totalRec.toLocaleString('es-AR');
+    document.getElementById('totalPendientes').textContent = pendientes.length;
+
+    resumenPorDia(items);
+    mostrarTabla(items);
+  }
+
+  function resumenPorDia(items) {
+    const dias = {};
+    items.forEach(item => {
+      if (!item.fecha?.S) return;
+      const dia = item.fecha.S.split('T')[0];
+      if (!dias[dia]) dias[dia] = { impresos: 0, paginas: 0, recaudado: 0, pendientes: 0 };
+      if (item.estado?.S === 'impreso') {
+        dias[dia].impresos++;
+        dias[dia].paginas += parseInt(item.paginas?.N || 0);
+        dias[dia].recaudado += parseInt(item.precio?.N || 0);
+      } else if (item.estado?.S === 'pendiente') {
+        dias[dia].pendientes++;
+      }
+    });
+
+    const sorted = Object.keys(dias).sort().reverse();
+    let html = '';
+    sorted.forEach(dia => {
+      const d = dias[dia];
+      const fecha = new Date(dia + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' });
+      html += `<div class="day-card">
+        <div class="dia">📅 ${fecha}</div>
+        <div class="linea"><span>Impresos</span><span>${d.impresos}</span></div>
+        <div class="linea"><span>Páginas</span><span>${d.paginas}</span></div>
+        <div class="linea"><span>Recaudado</span><span>$${d.recaudado.toLocaleString('es-AR')}</span></div>
+        ${d.pendientes > 0 ? `<div class="linea"><span>⚠️ Sin imprimir</span><span style="color:#dc2626">${d.pendientes}</span></div>` : ''}
+      </div>`;
+    });
+
+    document.getElementById('resumenDias').innerHTML = html || '<div class="loading">Sin datos</div>';
+  }
+
   function mostrarTabla(items) {
     if (items.length === 0) {
-      document.getElementById('tabla').innerHTML = '<div class="loading">No hay impresiones registradas</div>';
+      document.getElementById('tabla').innerHTML = '<div class="loading">No hay impresiones</div>';
       return;
     }
 
-    let total = items.length;
-    let paginas = items.reduce((s, i) => s + parseInt(i.paginas?.N || 0), 0);
-    let recaudado = items.reduce((s, i) => s + parseInt(i.precio?.N || 0), 0);
+    const sorted = [...items].sort((a, b) => new Date(b.fecha?.S || 0) - new Date(a.fecha?.S || 0));
 
-    document.getElementById('totalImpresiones').textContent = total;
-    document.getElementById('totalPaginas').textContent = paginas;
-    document.getElementById('totalRecaudado').textContent = '$' + recaudado.toLocaleString('es-AR');
+    let html = `<table><thead><tr>
+      <th>Fecha pago</th>
+      <th>Páginas</th>
+      <th>Precio</th>
+      <th>Estado</th>
+      <th>ID MercadoPago</th>
+      <th>Fecha impresión</th>
+    </tr></thead><tbody>`;
 
-    let html = `<table>
-      <thead><tr>
-        <th>Fecha</th>
-        <th>Páginas</th>
-        <th>Precio</th>
-        <th>Estado</th>
-        <th>Fecha impresión</th>
-      </tr></thead><tbody>`;
-
-    items.sort((a, b) => new Date(b.fecha?.S) - new Date(a.fecha?.S)).forEach(item => {
+    sorted.forEach(item => {
       const estado = item.estado?.S || 'pendiente';
       const fecha = item.fecha?.S ? new Date(item.fecha.S).toLocaleString('es-AR') : '-';
       const fechaImp = item.fechaImpresion?.S ? new Date(item.fechaImpresion.S).toLocaleString('es-AR') : '-';
-      html += `<tr>
+      const mpId = item.mpPaymentId?.S || null;
+      const esPendienteConFecha = estado === 'pendiente' && item.fecha?.S;
+      const rowClass = esPendienteConFecha ? 'alerta-row' : '';
+
+      html += `<tr class="${rowClass}">
         <td>${fecha}</td>
         <td>${item.paginas?.N || '-'}</td>
         <td>$${item.precio?.N || '-'}</td>
-        <td><span class="badge ${estado}">${estado}</span></td>
+        <td>
+          <span class="badge ${estado}">${estado}</span>
+          ${esPendienteConFecha ? '<span class="tag-alerta">⚠️ revisar</span>' : ''}
+        </td>
+        <td>${mpId ? `<span class="mp-id">${mpId}</span>` : '<span class="sin-mp">sin ID</span>'}</td>
         <td>${fechaImp}</td>
       </tr>`;
     });
