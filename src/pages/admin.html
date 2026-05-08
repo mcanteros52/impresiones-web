@@ -44,9 +44,7 @@
   .alerta-row td { background: #fff7f7 !important; }
   .tag-alerta { background: #fee2e2; color: #991b1b; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 4px; }
   .printer-status { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-  .dot.online { background: #22c55e; }
-  .dot.offline { background: #ef4444; }
+  .printer-info { background: #1e3a5f; border-radius: 8px; padding: 8px 14px; font-size: 12px; display: flex; align-items: center; gap: 10px; }
 </style>
 </head>
 <body>
@@ -63,14 +61,13 @@
   <div class="header">
     <h1>🖨️ Panel de Administración</h1>
     <div style="display:flex;align-items:center;gap:16px;">
-      <div id="printerStatus" class="printer-status"><span class="dot"></span> Verificando...</div>
+      <div id="printerStatus" class="printer-info">⏳ Verificando impresora...</div>
       <button class="btn-logout" onclick="logout()">Cerrar sesión</button>
     </div>
   </div>
 
   <div class="container">
 
-    <!-- Stats globales -->
     <div class="stats">
       <div class="stat">
         <div class="stat-num" id="totalImpresiones">-</div>
@@ -90,13 +87,11 @@
       </div>
     </div>
 
-    <!-- Resumen por día -->
     <div class="card">
       <h2>📅 Resumen por día</h2>
       <div class="day-grid" id="resumenDias"><div class="loading">Cargando...</div></div>
     </div>
 
-    <!-- Historial -->
     <div class="card">
       <h2>📋 Historial de impresiones</h2>
       <div id="tabla"><div class="loading">Cargando...</div></div>
@@ -112,6 +107,7 @@
   const API_URL = 'https://gkq2wcd8ni.execute-api.us-east-1.amazonaws.com/prod';
   const ADMIN_EMAIL = 'mcanteros52@gmail.com';
   const PRINTNODE_API_KEY = 'csOrj4p9G1a6ux7y9YIcG9of93IbJEnzMSkB-1Jdokg';
+  const PRINTER_ID = 75430456;
 
   async function init() {
     const code = new URLSearchParams(window.location.search).get('code');
@@ -175,17 +171,56 @@
   }
 
   async function verificarImpresora() {
+    const el = document.getElementById('printerStatus');
     try {
-      const res = await fetch('https://api.printnode.com/printers/75430456', {
-        headers: { 'Authorization': 'Basic ' + btoa(PRINTNODE_API_KEY + ':') }
+      const authHeader = 'Basic ' + btoa(PRINTNODE_API_KEY + ':');
+
+      const resPrinter = await fetch(`https://api.printnode.com/printers/${PRINTER_ID}`, {
+        headers: { 'Authorization': authHeader }
       });
-      const data = await res.json();
-      const printer = Array.isArray(data) ? data[0] : data;
-      const online = printer?.computer?.state === 'connected';
-      const el = document.getElementById('printerStatus');
-      el.innerHTML = `<span class="dot ${online ? 'online' : 'offline'}"></span> Impresora: ${online ? 'Online ✓' : 'Offline ✗'}`;
-    } catch {
-      document.getElementById('printerStatus').innerHTML = '<span class="dot offline"></span> Sin estado';
+      const dataPrinter = await resPrinter.json();
+      const printer = Array.isArray(dataPrinter) ? dataPrinter[0] : dataPrinter;
+
+      const computerOnline = printer?.computer?.state === 'connected';
+      const printerState = printer?.state || 'unknown';
+
+      let icono = '';
+      let texto = '';
+      let color = '';
+
+      if (!computerOnline) {
+        icono = '🔴';
+        texto = 'Offline — verificar conexión';
+        color = '#fca5a5';
+      } else if (printerState === 'online') {
+        icono = '🟢';
+        texto = 'Lista para imprimir';
+        color = '#86efac';
+      } else if (printerState === 'offline') {
+        icono = '🔴';
+        texto = 'Apagada';
+        color = '#fca5a5';
+      } else {
+        icono = '🟡';
+        texto = 'Estado: ' + printerState;
+        color = '#fde68a';
+      }
+
+      const resJobs = await fetch('https://api.printnode.com/printjobs?limit=10', {
+        headers: { 'Authorization': authHeader }
+      });
+      const jobs = await resJobs.json();
+      const enCola = Array.isArray(jobs) ? jobs.filter(j => j.state === 'new' || j.state === 'in_progress') : [];
+
+      let extra = '';
+      if (enCola.length > 0) {
+        extra = ` &nbsp;|&nbsp; ⚠️ ${enCola.length} trabajo(s) en cola`;
+      }
+
+      el.innerHTML = `<span style="color:${color}">${icono} Impresora: ${texto}${extra}</span>`;
+
+    } catch (e) {
+      el.innerHTML = '<span style="color:#94a3b8">⚪ Sin estado disponible</span>';
     }
   }
 
