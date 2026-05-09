@@ -57,6 +57,18 @@
     margin-top: 8px;
     padding-top: 8px;
   }
+  .printer-banner {
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+    margin-bottom: 12px;
+    display: none;
+    align-items: center;
+    gap: 8px;
+  }
+  .printer-banner.online { background: #dcfce7; color: #166534; display: flex; }
+  .printer-banner.offline { background: #fee2e2; color: #991b1b; display: flex; }
+  .printer-banner.checking { background: #dbeafe; color: #1e40af; display: flex; }
   button {
     width: 100%;
     padding: 14px;
@@ -86,20 +98,20 @@
 </head>
 <body>
 <div class="card">
-  <h2>🖨️ Impresiones App</h2>
-
+  <h2>Impresiones App</h2>
+ 
   <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
-    <div id="dropText">Hacé clic para elegir un PDF</div>
+    <div id="dropText">Hace clic para elegir un PDF</div>
   </div>
   <input type="file" id="fileInput" accept=".pdf">
-
+ 
   <div class="resumen" id="resumen">
     <div class="resumen-row">
-      <span>Páginas detectadas</span>
+      <span>Paginas detectadas</span>
       <span id="numPaginas">-</span>
     </div>
     <div class="resumen-row">
-      <span>Precio por página</span>
+      <span>Precio por pagina</span>
       <span>$100</span>
     </div>
     <div class="resumen-row total">
@@ -107,59 +119,114 @@
       <span id="totalPrecio">-</span>
     </div>
   </div>
-
+ 
+  <div class="printer-banner" id="printerBanner"></div>
+ 
   <button id="pagarBtn" onclick="iniciarPago()" disabled>
     Pagar con <span class="mp-logo">Mercado Pago</span>
   </button>
-
+ 
   <div class="status" id="status"></div>
 </div>
-
+ 
 <script>
   const API_URL = 'https://gkq2wcd8ni.execute-api.us-east-1.amazonaws.com/prod';
+  const PRINTNODE_API_KEY = 'tu-api-key-aqui';
+  const PRINTER_ID = 75430456;
+ 
   let archivoSeleccionado = null;
   let pdfBase64 = null;
   let numeroPaginas = 0;
-
+  let impresoraOnline = false;
+ 
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
+ 
+  async function verificarImpresora() {
+    const banner = document.getElementById('printerBanner');
+    const btn = document.getElementById('pagarBtn');
+ 
+    banner.className = 'printer-banner checking';
+    banner.textContent = 'Verificando estado de la impresora...';
+ 
+    try {
+      const res = await fetch('https://api.printnode.com/printers/' + PRINTER_ID, {
+        headers: { 'Authorization': 'Basic ' + btoa(PRINTNODE_API_KEY + ':') }
+      });
+      const data = await res.json();
+      const printer = Array.isArray(data) ? data[0] : data;
+      const computerOnline = printer && printer.computer && printer.computer.state === 'connected';
+      const printerState = printer ? printer.state : 'unknown';
+ 
+      if (computerOnline && printerState === 'online') {
+        impresoraOnline = true;
+        banner.className = 'printer-banner online';
+        banner.textContent = 'Impresora lista - podes imprimir sin problemas';
+        if (archivoSeleccionado) btn.disabled = false;
+      } else {
+        impresoraOnline = false;
+        banner.className = 'printer-banner offline';
+        if (!computerOnline) {
+          banner.textContent = 'Impresora sin conexion - no se puede imprimir en este momento. Intenta mas tarde.';
+        } else {
+          banner.textContent = 'Impresora no disponible (' + printerState + ') - intenta mas tarde.';
+        }
+        btn.disabled = true;
+      }
+    } catch (e) {
+      impresoraOnline = false;
+      banner.className = 'printer-banner offline';
+      banner.textContent = 'No se pudo verificar el estado de la impresora. Intenta mas tarde.';
+      btn.disabled = true;
+    }
+  }
+ 
   document.getElementById('fileInput').addEventListener('change', async function(e) {
     const file = e.target.files[0];
     if (!file || file.type !== 'application/pdf') return;
-
+ 
     archivoSeleccionado = file;
-    document.getElementById('dropText').textContent = '✓ ' + file.name;
+    document.getElementById('dropText').textContent = file.name;
     document.getElementById('dropZone').classList.add('selected');
-
+ 
     mostrarStatus('loading', 'Analizando PDF...');
-
+ 
     try {
       pdfBase64 = await fileToBase64(file);
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       numeroPaginas = pdf.numPages;
-
+ 
       document.getElementById('numPaginas').textContent = numeroPaginas;
       document.getElementById('totalPrecio').textContent = '$' + (numeroPaginas * 100).toLocaleString('es-AR');
       document.getElementById('resumen').style.display = 'block';
-      document.getElementById('pagarBtn').disabled = false;
       document.getElementById('status').style.display = 'none';
-
+ 
+      await verificarImpresora();
+ 
     } catch (err) {
       mostrarStatus('error', 'Error al leer el PDF: ' + err.message);
     }
   });
-
+ 
   async function iniciarPago() {
     if (!archivoSeleccionado) return;
-
+ 
     const btn = document.getElementById('pagarBtn');
+ 
+    mostrarStatus('loading', 'Verificando impresora...');
+    await verificarImpresora();
+ 
+    if (!impresoraOnline) {
+      mostrarStatus('error', 'La impresora no esta disponible. No se puede procesar el pago en este momento.');
+      return;
+    }
+ 
     btn.disabled = true;
     mostrarStatus('loading', 'Creando orden de pago...');
-
+ 
     try {
       const archiveId = 'pdf_' + Date.now();
-
+ 
       const response = await fetch(API_URL + '/pago', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -169,9 +236,9 @@
           pdf: pdfBase64
         })
       });
-
+ 
       const data = await response.json();
-
+ 
       if (data.init_point) {
         mostrarStatus('success', 'Redirigiendo a Mercado Pago...');
         setTimeout(() => {
@@ -180,23 +247,23 @@
       } else {
         throw new Error('No se pudo crear la preferencia de pago');
       }
-
+ 
     } catch (err) {
       mostrarStatus('error', 'Error: ' + err.message);
       btn.disabled = false;
     }
   }
-
+ 
   function mostrarStatus(tipo, mensaje) {
     const el = document.getElementById('status');
     el.className = 'status ' + tipo;
-    el.textContent = (tipo === 'loading' ? '⏳ ' : tipo === 'success' ? '✓ ' : '✗ ') + mensaje;
+    el.textContent = (tipo === 'loading' ? 'Cargando... ' : tipo === 'success' ? 'OK ' : 'Error: ') + mensaje;
   }
-
+ 
   function fileToBase64(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onload = function() { resolve(reader.result.split(',')[1]); };
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
