@@ -18,10 +18,16 @@
   td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; color: #333; vertical-align: middle; }
   tr:last-child td { border-bottom: none; }
   tr:hover td { background: #f8fafc; }
+
+  /* ─── Badges para cada estado ─── */
   .badge { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: bold; display: inline-block; }
-  .badge.impreso { background: #dcfce7; color: #166534; }
-  .badge.pendiente { background: #fef9c3; color: #854d0e; }
-  .badge.error { background: #fee2e2; color: #991b1b; }
+  .badge.impreso            { background: #dcfce7; color: #166534; }
+  .badge.pendiente          { background: #fef9c3; color: #854d0e; }
+  .badge.pagado             { background: #dbeafe; color: #1e40af; }
+  .badge.enviado_a_imprimir { background: #ede9fe; color: #5b21b6; }
+  .badge.error_impresion    { background: #fee2e2; color: #991b1b; }
+  .badge.error              { background: #fee2e2; color: #991b1b; }
+
   .loading { text-align: center; padding: 40px; color: #888; }
   .login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
   .login-card { background: white; border-radius: 12px; padding: 40px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1); max-width: 400px; width: 100%; }
@@ -43,7 +49,6 @@
   .sin-mp { font-size: 11px; color: #94a3b8; font-style: italic; }
   .alerta-row td { background: #fff7f7 !important; }
   .tag-alerta { background: #fee2e2; color: #991b1b; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 4px; }
-  .printer-status { display: flex; align-items: center; gap: 8px; font-size: 13px; }
   .printer-info { background: #1e3a5f; border-radius: 8px; padding: 8px 14px; font-size: 12px; display: flex; align-items: center; gap: 10px; }
 </style>
 </head>
@@ -109,13 +114,19 @@
   const PRINTNODE_API_KEY = 'csOrj4p9G1a6ux7y9YIcG9of93IbJEnzMSkB-lJdokg';
   const PRINTER_ID = 75430459;
 
+  // Estados que consideramos "sin imprimir" — pagaron pero no salió por la impresora aún
+  const ESTADOS_SIN_IMPRIMIR = ['pendiente', 'pagado', 'enviado_a_imprimir'];
+  // Estados finales exitosos
+  const ESTADOS_EXITOSOS = ['impreso'];
+  // Estados de error
+  const ESTADOS_ERROR = ['error', 'error_impresion', 'error_envio_impresion'];
+
   async function init() {
     const code = new URLSearchParams(window.location.search).get('code');
     if (code) {
       await exchangeCode(code);
       window.history.replaceState({}, '', '/admin');
     }
-
     const token = sessionStorage.getItem('id_token');
     if (token) {
       const email = getEmailFromToken(token);
@@ -151,9 +162,8 @@
   }
 
   function getEmailFromToken(token) {
-    try {
-      return JSON.parse(atob(token.split('.')[1])).email;
-    } catch { return null; }
+    try { return JSON.parse(atob(token.split('.')[1])).email; }
+    catch { return null; }
   }
 
   function login() {
@@ -174,36 +184,23 @@
     const el = document.getElementById('printerStatus');
     try {
       const authHeader = 'Basic ' + btoa(PRINTNODE_API_KEY + ':');
-
       const resPrinter = await fetch(`https://api.printnode.com/printers/${PRINTER_ID}`, {
         headers: { 'Authorization': authHeader }
       });
       const dataPrinter = await resPrinter.json();
       const printer = Array.isArray(dataPrinter) ? dataPrinter[0] : dataPrinter;
-
       const computerOnline = printer?.computer?.state === 'connected';
       const printerState = printer?.state || 'unknown';
 
-      let icono = '';
-      let texto = '';
-      let color = '';
-
+      let icono, texto, color;
       if (!computerOnline) {
-        icono = '🔴';
-        texto = 'Offline — verificar conexión';
-        color = '#fca5a5';
+        icono = '🔴'; texto = 'Offline — verificar conexión'; color = '#fca5a5';
       } else if (printerState === 'online') {
-        icono = '🟢';
-        texto = 'Lista para imprimir';
-        color = '#86efac';
+        icono = '🟢'; texto = 'Lista para imprimir'; color = '#86efac';
       } else if (printerState === 'offline') {
-        icono = '🔴';
-        texto = 'Apagada';
-        color = '#fca5a5';
+        icono = '🔴'; texto = 'Apagada'; color = '#fca5a5';
       } else {
-        icono = '🟡';
-        texto = 'Estado: ' + printerState;
-        color = '#fde68a';
+        icono = '🟡'; texto = 'Estado: ' + printerState; color = '#fde68a';
       }
 
       const resJobs = await fetch('https://api.printnode.com/printjobs?limit=10', {
@@ -211,14 +208,9 @@
       });
       const jobs = await resJobs.json();
       const enCola = Array.isArray(jobs) ? jobs.filter(j => j.state === 'new' || j.state === 'in_progress') : [];
-
-      let extra = '';
-      if (enCola.length > 0) {
-        extra = ` &nbsp;|&nbsp; ⚠️ ${enCola.length} trabajo(s) en cola`;
-      }
+      const extra = enCola.length > 0 ? ` &nbsp;|&nbsp; ⚠️ ${enCola.length} trabajo(s) en cola` : '';
 
       el.innerHTML = `<span style="color:${color}">${icono} Impresora: ${texto}${extra}</span>`;
-
     } catch (e) {
       el.innerHTML = '<span style="color:#94a3b8">⚪ Sin estado disponible</span>';
     }
@@ -238,15 +230,20 @@
   }
 
   function procesar(items) {
-    const impresos = items.filter(i => i.estado?.S === 'impreso');
-    const pendientes = items.filter(i => i.estado?.S === 'pendiente' && i.fecha?.S);
+    // ─── Estadísticas con nuevos estados ───
+    const impresos    = items.filter(i => ESTADOS_EXITOSOS.includes(i.estado?.S));
+    // "Sin imprimir" = pagaron pero todavía no confirmamos impresión
+    // Excluimos los que están en pendiente sin mpPaymentId (nunca pagaron)
+    const sinImprimir = items.filter(i =>
+      ESTADOS_SIN_IMPRIMIR.includes(i.estado?.S) && i.mpPaymentId?.S
+    );
     const totalPaginas = impresos.reduce((s, i) => s + parseInt(i.paginas?.N || 0), 0);
-    const totalRec = impresos.reduce((s, i) => s + parseInt(i.precio?.N || 0), 0);
+    const totalRec     = impresos.reduce((s, i) => s + parseInt(i.precio?.N || 0), 0);
 
     document.getElementById('totalImpresiones').textContent = impresos.length;
     document.getElementById('totalPaginas').textContent = totalPaginas;
     document.getElementById('totalRecaudado').textContent = '$' + totalRec.toLocaleString('es-AR');
-    document.getElementById('totalPendientes').textContent = pendientes.length;
+    document.getElementById('totalPendientes').textContent = sinImprimir.length;
 
     resumenPorDia(items);
     mostrarTabla(items);
@@ -257,13 +254,16 @@
     items.forEach(item => {
       if (!item.fecha?.S) return;
       const dia = item.fecha.S.split('T')[0];
-      if (!dias[dia]) dias[dia] = { impresos: 0, paginas: 0, recaudado: 0, pendientes: 0 };
-      if (item.estado?.S === 'impreso') {
+      if (!dias[dia]) dias[dia] = { impresos: 0, paginas: 0, recaudado: 0, sinImprimir: 0, errores: 0 };
+      const estado = item.estado?.S;
+      if (ESTADOS_EXITOSOS.includes(estado)) {
         dias[dia].impresos++;
         dias[dia].paginas += parseInt(item.paginas?.N || 0);
         dias[dia].recaudado += parseInt(item.precio?.N || 0);
-      } else if (item.estado?.S === 'pendiente') {
-        dias[dia].pendientes++;
+      } else if (ESTADOS_SIN_IMPRIMIR.includes(estado) && item.mpPaymentId?.S) {
+        dias[dia].sinImprimir++;
+      } else if (ESTADOS_ERROR.includes(estado)) {
+        dias[dia].errores++;
       }
     });
 
@@ -277,11 +277,25 @@
         <div class="linea"><span>Impresos</span><span>${d.impresos}</span></div>
         <div class="linea"><span>Páginas</span><span>${d.paginas}</span></div>
         <div class="linea"><span>Recaudado</span><span>$${d.recaudado.toLocaleString('es-AR')}</span></div>
-        ${d.pendientes > 0 ? `<div class="linea"><span>⚠️ Sin imprimir</span><span style="color:#dc2626">${d.pendientes}</span></div>` : ''}
+        ${d.sinImprimir > 0 ? `<div class="linea"><span>⚠️ Sin imprimir</span><span style="color:#dc2626">${d.sinImprimir}</span></div>` : ''}
+        ${d.errores > 0 ? `<div class="linea"><span>❌ Errores</span><span style="color:#dc2626">${d.errores}</span></div>` : ''}
       </div>`;
     });
 
     document.getElementById('resumenDias').innerHTML = html || '<div class="loading">Sin datos</div>';
+  }
+
+  function estadoLabel(estado) {
+    const labels = {
+      'pendiente':          'Pendiente',
+      'pagado':             'Pagado',
+      'enviado_a_imprimir': 'Enviado a imprimir',
+      'impreso':            'Impreso',
+      'error_impresion':    'Error impresión',
+      'error_envio_impresion': 'Error envío',
+      'error':              'Error'
+    };
+    return labels[estado] || estado;
   }
 
   function mostrarTabla(items) {
@@ -306,16 +320,20 @@
       const fecha = item.fecha?.S ? new Date(item.fecha.S).toLocaleString('es-AR') : '-';
       const fechaImp = item.fechaImpresion?.S ? new Date(item.fechaImpresion.S).toLocaleString('es-AR') : '-';
       const mpId = item.mpPaymentId?.S || null;
-      const esPendienteConFecha = estado === 'pendiente' && item.fecha?.S;
-      const rowClass = esPendienteConFecha ? 'alerta-row' : '';
+
+      // Fila en rojo si pagó pero no se imprimió
+      const esAlerta = ESTADOS_SIN_IMPRIMIR.includes(estado) && mpId;
+      const esError = ESTADOS_ERROR.includes(estado);
+      const rowClass = esAlerta || esError ? 'alerta-row' : '';
 
       html += `<tr class="${rowClass}">
         <td>${fecha}</td>
         <td>${item.paginas?.N || '-'}</td>
         <td>$${item.precio?.N || '-'}</td>
         <td>
-          <span class="badge ${estado}">${estado}</span>
-          ${esPendienteConFecha ? '<span class="tag-alerta">⚠️ revisar</span>' : ''}
+          <span class="badge ${estado}">${estadoLabel(estado)}</span>
+          ${esAlerta ? '<span class="tag-alerta">⚠️ revisar</span>' : ''}
+          ${esError  ? '<span class="tag-alerta">❌ error</span>'   : ''}
         </td>
         <td>${mpId ? `<span class="mp-id">${mpId}</span>` : '<span class="sin-mp">sin ID</span>'}</td>
         <td>${fechaImp}</td>
