@@ -1,5 +1,5 @@
 # Astro Starter Kit: Basics
-
+Este es un proyecto sobre impresiones web para estudiantes de colegios, la idea es que los estudiantes suban sus archivos pdf a una pagina web y la pagina le dice la cantidad de archivos, lo envia a un  link de mercado pago y una vez pago, envia la impresion a la impresora del colegio o kiosko donde se encuentre y es un programa donde el comercio agrega la impresora y la persona sube un archivo a imprimir.
 ```sh
 npm create astro@latest -- --template basics
 ```
